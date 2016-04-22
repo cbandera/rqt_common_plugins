@@ -92,22 +92,22 @@ class ROSData(object):
     Subscriber to ROS topic that buffers incoming data
     """
 
-    def __init__(self, topic, start_time):
-        self.name = topic
-        self.start_time = start_time
+    def __init__(self, base_topic, x_field, y_field):
+        self.name = base_topic
         self.error = None
 
         self.lock = threading.Lock()
         self.buff_x = []
         self.buff_y = []
 
-        topic_type, real_topic, fields = get_topic_type(topic)
+        topic_type, real_topic, fields = get_topic_type(base_topic)
         if topic_type is not None:
-            self.field_evals = generate_field_evals(fields)
+            self.x_field_evals = generate_field_evals(base_topic[len(real_topic)+1:], x_field)
+            self.y_field_evals = generate_field_evals(base_topic[len(real_topic)+1:], y_field)
             data_class = roslib.message.get_message_class(topic_type)
             self.sub = rospy.Subscriber(real_topic, data_class, self._ros_cb)
         else:
-            self.error = RosPlotException("Can not resolve topic type of %s" % topic)
+            self.error = RosPlotException("Can not resolve base_topic type of %s" % base_topic)
 
     def close(self):
         self.sub.unregister()
@@ -120,13 +120,8 @@ class ROSData(object):
         try:
             self.lock.acquire()
             try:
-                self.buff_y.append(self._get_data(msg))
-                # #944: use message header time if present
-                if msg.__class__._has_header:
-                    self.buff_x.append(msg.header.stamp.to_sec() - self.start_time)
-                else:
-                    self.buff_x.append(rospy.get_time() - self.start_time)
-                #self.axes[index].plot(datax, buff_y)
+                self.buff_x = self._get_data(self.x_field_evals, msg)
+                self.buff_y = self._get_data(self.y_field_evals, msg)
             except AttributeError, e:
                 self.error = RosPlotException("Invalid topic spec [%s]: %s" % (self.name, str(e)))
         finally:
@@ -150,28 +145,30 @@ class ROSData(object):
             self.lock.release()
         return buff_x, buff_y
 
-    def _get_data(self, msg):
+    def _get_data(self, evals, msg):
         val = msg
         try:
-            if not self.field_evals:
+            if not evals:
                 return float(val)
-            for f in self.field_evals:
+            for f in evals:
                 val = f(val)
-            return float(val)
+            return [float(v) for v in val]
         except IndexError:
             self.error = RosPlotException("[%s] index error for: %s" % (self.name, str(val).replace('\n', ', ')))
         except TypeError:
             self.error = RosPlotException("[%s] value was not numeric: %s" % (self.name, val))
 
 
-def _array_eval(field_name, slot_num):
+def _array_eval(field_name):
     """
     :param field_name: name of field to index into, ``str``
     :param slot_num: index of slot to return, ``str``
     :returns: fn(msg_field)->msg_field[slot_num]
     """
+
     def fn(f):
-        return getattr(f, field_name).__getitem__(slot_num)
+        return [getattr(el, field_name) for el in f]
+
     return fn
 
 
@@ -180,22 +177,37 @@ def _field_eval(field_name):
     :param field_name: name of field to return, ``str``
     :returns: fn(msg_field)->msg_field.field_name
     """
+
     def fn(f):
         return getattr(f, field_name)
+
     return fn
 
 
-def generate_field_evals(fields):
+def _dummy_eval():
+    """
+    :param field_name: name of field to return, ``str``
+    :returns: fn(msg_field)->msg_field.field_name
+    """
+
+    def fn(f):
+        return range(len(f))
+
+    return fn
+
+
+def generate_field_evals(base_topic, rel_topic):
     try:
         evals = []
-        fields = [f for f in fields.split('/') if f]
+        fields = [f for f in base_topic.split('/') if f]
         for f in fields:
-            if '[' in f:
-                field_name, rest = f.split('[')
-                slot_num = string.atoi(rest[:rest.find(']')])
-                evals.append(_array_eval(field_name, slot_num))
-            else:
-                evals.append(_field_eval(f))
+            evals.append(_field_eval(f))
+        if rel_topic == "None":
+            evals.append(_dummy_eval())
+        else:
+            fields = [f for f in rel_topic.split('/') if f]
+            for f in fields:
+                evals.append(_array_eval(f))
         return evals
     except Exception, e:
-        raise RosPlotException("cannot parse field reference [%s]: %s" % (fields, str(e)))
+        raise RosPlotException("cannot parse field reference [%s]: %s" % (rel_topic, str(e)))

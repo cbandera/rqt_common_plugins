@@ -55,9 +55,8 @@ class Plot(Plugin):
         self._data_plot = DataPlot(self._widget)
 
         # disable autoscaling of X, and set a sane default range
-        self._data_plot.set_autoscale(x=False)
+        self._data_plot.set_autoscale(x=DataPlot.SCALE_EXTEND|DataPlot.SCALE_VISIBLE)
         self._data_plot.set_autoscale(y=DataPlot.SCALE_EXTEND|DataPlot.SCALE_VISIBLE)
-        self._data_plot.set_xlim([0, 10.0])
 
         self._widget.switch_data_plot_widget(self._data_plot)
         if context.serial_number() > 1:
@@ -65,7 +64,7 @@ class Plot(Plugin):
         context.add_widget(self._widget)
 
     def _parse_args(self, argv):
-        parser = argparse.ArgumentParser(prog='rqt_plot', add_help=False)
+        parser = argparse.ArgumentParser(prog='rqt_plot_xy', add_help=False)
         Plot.add_arguments(parser)
         args = parser.parse_args(argv)
 
@@ -92,7 +91,7 @@ class Plot(Plugin):
                     c_topics.append(sub_t)
             # #1053: resolve command-line topic names
             import rosgraph
-            c_topics = [rosgraph.names.script_resolve_name('rqt_plot', n) for n in c_topics]
+            c_topics = [rosgraph.names.script_resolve_name('rqt_plot_xy', n) for n in c_topics]
             if type(c_topics) == list:
                 topic_list.extend(c_topics)
             else:
@@ -103,7 +102,7 @@ class Plot(Plugin):
 
     @staticmethod
     def add_arguments(parser):
-        group = parser.add_argument_group('Options for rqt_plot plugin')
+        group = parser.add_argument_group('Options for rqt_plot_xy plugin')
         group.add_argument('-P', '--pause', action='store_true', dest='start_paused',
             help='Start in paused state')
         group.add_argument('-e', '--empty', action='store_true', dest='start_empty',
@@ -117,18 +116,21 @@ class Plot(Plugin):
 
     def save_settings(self, plugin_settings, instance_settings):
         self._data_plot.save_settings(plugin_settings, instance_settings)
+        instance_settings.set_value('autoscale', self._widget.autoscale_checkbox.isChecked())
         instance_settings.set_value('topics', pack(self._widget._rosdata.keys()))
-        # TODO store settings
 
     def restore_settings(self, plugin_settings, instance_settings):
-        # TODO restore settings
+        autoscale = instance_settings.value('autoscale', True) in [True, 'true']
+        self._widget.autoscale_checkbox.setChecked(autoscale)
+        self._data_plot.autoscale(autoscale)
+
         self._update_title()
 
         if len(self._widget._rosdata.keys()) == 0 and not self._args.start_empty:
             topics = unpack(instance_settings.value('topics', []))
             if topics:
                 for topic in topics:
-                    self._widget.add_topic(topic)
+                    self._widget.add_topic(*topic.split(" - "))
 
         self._data_plot.restore_settings(plugin_settings, instance_settings)
 

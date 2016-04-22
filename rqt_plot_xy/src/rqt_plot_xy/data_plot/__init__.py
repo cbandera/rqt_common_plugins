@@ -166,7 +166,7 @@ class DataPlot(QWidget):
             self._data_plot_widget = None
         else:
             x_limits = [0.0, 10.0]
-            y_limits = [-0.001, 0.001]
+            y_limits = [0.0, 10.0]
 
         self._data_plot_widget = selected_plot['widget_class'](self)
         self._data_plot_widget.limits_changed.connect(self.limits_changed)
@@ -271,6 +271,11 @@ class DataPlot(QWidget):
 
     # interface out to the managing DATA component: load data, update data,
     # etc
+    def autoscale(self, enabled=True):
+        """Enable or disable autoscaling of the plot"""
+        self._autoscale_x = enabled
+        self._autoscale_y = enabled
+
     def redraw(self):
         self._redraw.emit()
 
@@ -332,12 +337,9 @@ class DataPlot(QWidget):
         any changes visible to the user.
         """
         curve = self._get_curve(curve_id)
-        curve['x'] = numpy.append(curve['x'], values_x)
-        curve['y'] = numpy.append(curve['y'], values_y)
-        # sort resulting data, so we can slice it later
-        sort_order = curve['x'].argsort()
-        curve['x'] = curve['x'][sort_order]
-        curve['y'] = curve['y'][sort_order]
+        curve['x'] = numpy.array(values_x)
+        curve['y'] = numpy.array(values_y)
+
 
     def clear_values(self, curve_id=None):
         """Clear the values for the specified curve, or all curves
@@ -401,7 +403,7 @@ class DataPlot(QWidget):
     #  * scale Y to fit the current view
     #  * increase the Y scale to fit the current view
     #
-    # TODO: incrmenetal autoscaling: only update the autoscaling bounds
+    # TODO: incremenetal autoscaling: only update the autoscaling bounds
     #       when new data is added
     def _merged_autoscale(self):
         x_limit = [numpy.inf, -numpy.inf]
@@ -421,46 +423,24 @@ class DataPlot(QWidget):
         if numpy.isinf(x_limit[1]):
             x_limit[1] = 1.0
 
+        # pad the min/max
+        if self._autoscale_x:
+            xmin = x_limit[0]
+            xmax = x_limit[1]
+            delta = xmax - xmin if xmax != xmin else 0.1
+            xmin -= .05 * delta
+            xmax += .05 * delta
+            x_limit = [xmin, xmax]
 
         y_limit = [numpy.inf, -numpy.inf]
         if self._autoscale_y:
-            # if we're extending the y limits, initialize them with the
-            # current limits
-            if self._autoscale_y & DataPlot.SCALE_EXTEND:
-                y_limit = self.get_ylim()
             for curve_id in self._curves:
                 curve = self._curves[curve_id]
-                start_index = 0
-                end_index = len(curve['x'])
-
-                # if we're scaling based on the visible window, find the
-                # start and end indicies of our window
-                if self._autoscale_y & DataPlot.SCALE_VISIBLE:
-                    # indexof x_limit[0] in curves['x']
-                    start_index = curve['x'].searchsorted(x_limit[0])
-                    # indexof x_limit[1] in curves['x']
-                    end_index = curve['x'].searchsorted(x_limit[1])
-
-                # region here is cheap because it is a numpy view and not a
-                # copy of the underlying data
-                region = curve['y'][start_index:end_index]
-                if len(region) > 0:
-                    y_limit[0] = min(y_limit[0], region.min())
-                    y_limit[1] = max(y_limit[1], region.max())
-
-                # TODO: compute padding around new min and max values
-                #       ONLY consider data for new values; not
-                #       existing limits, or we'll add padding on top of old
-                #       padding in SCALE_EXTEND mode
-                # 
-                # pad the min/max
-                # TODO: invert this padding in get_ylim
-                #ymin = limits[0]
-                #ymax = limits[1]
-                #delta = ymax - ymin if ymax != ymin else 0.1
-                #ymin -= .05 * delta
-                #ymax += .05 * delta
+                if len(curve['y']) > 0:
+                    y_limit[0] = min(y_limit[0], curve['y'].min())
+                    y_limit[1] = max(y_limit[1], curve['y'].max())
         else:
+            # don't modify limit, or get it from plot
             y_limit = self.get_ylim()
 
         # set sane limits if our limits are infinite
@@ -468,6 +448,15 @@ class DataPlot(QWidget):
             y_limit[0] = 0.0
         if numpy.isinf(y_limit[1]):
             y_limit[1] = 1.0
+
+        # pad the min/max
+        if self._autoscale_y:
+            ymin = y_limit[0]
+            ymax = y_limit[1]
+            delta = ymax - ymin if ymax != ymin else 0.1
+            ymin -= .05 * delta
+            ymax += .05 * delta
+            y_limit = [ymin, ymax]
 
         self.set_xlim(x_limit)
         self.set_ylim(y_limit)
@@ -478,7 +467,7 @@ class DataPlot(QWidget):
             return self._data_plot_widget.get_xlim()
         else:
             qWarning("No plot widget; returning default X limits")
-            return [0.0, 1.0]
+            return [0.0, 10.0]
 
     def set_xlim(self, limits):
         """set X limits"""
@@ -501,5 +490,3 @@ class DataPlot(QWidget):
             self._data_plot_widget.set_ylim(limits)
         else:
             qWarning("No plot widget; can't set Y limits")
-
-    # signal on y limit changed?
