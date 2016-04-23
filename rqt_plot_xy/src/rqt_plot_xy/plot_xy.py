@@ -124,9 +124,6 @@ class PlotXY(Plugin):
         self._widget.autoscale_checkbox.setChecked(autoscale)
         self._data_plot.autoscroll(autoscale)
 
-        markers_on = instance_settings.value('markers_on', True) in [True, 'true']
-        self._data_plot._switch_plot_markers(markers_on)
-
         self._update_title()
 
         if len(self._widget._rosdata.keys()) == 0 and not self._args.start_empty:

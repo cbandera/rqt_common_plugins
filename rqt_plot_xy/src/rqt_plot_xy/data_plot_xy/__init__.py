@@ -135,3 +135,12 @@ class DataPlotXY(DataPlot):
         # Set new limits
         self.set_xlim(x_limit)
         self.set_ylim(y_limit)
+
+    def save_settings(self, plugin_settings, instance_settings):
+        super(DataPlotXY,self).save_settings(plugin_settings,instance_settings)
+        instance_settings.set_value('markers_on', self._markers_on)
+
+    def restore_settings(self, plugin_settings, instance_settings):
+        super(DataPlotXY,self).restore_settings(plugin_settings,instance_settings)
+        markers_on = instance_settings.value('markers_on', True) in [True, 'true']
+        self._switch_plot_markers(markers_on)
