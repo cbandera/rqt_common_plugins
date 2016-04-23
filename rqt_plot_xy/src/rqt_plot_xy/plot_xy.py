@@ -38,25 +38,24 @@ from rqt_gui_py.plugin import Plugin
 
 from rqt_py_common.ini_helper import pack, unpack
 
-from .plot_widget import PlotWidget
+from .plot_widget_xy import PlotWidgetXY
 
-from .data_plot import DataPlot
+from .data_plot_xy import DataPlotXY
 
-class Plot(Plugin):
+class PlotXY(Plugin):
 
     def __init__(self, context):
-        super(Plot, self).__init__(context)
+        super(PlotXY, self).__init__(context)
         self.setObjectName('Plot')
 
         self._context = context
 
         self._args = self._parse_args(context.argv())
-        self._widget = PlotWidget(initial_topics=self._args.topics, start_paused=self._args.start_paused)
-        self._data_plot = DataPlot(self._widget)
+        self._widget = PlotWidgetXY(initial_topics=self._args.topics, start_paused=self._args.start_paused)
+        self._data_plot = DataPlotXY(self._widget)
 
-        # disable autoscaling of X, and set a sane default range
-        self._data_plot.set_autoscale(x=DataPlot.SCALE_EXTEND|DataPlot.SCALE_VISIBLE)
-        self._data_plot.set_autoscale(y=DataPlot.SCALE_EXTEND|DataPlot.SCALE_VISIBLE)
+        self._data_plot.set_autoscale(x=DataPlotXY.SCALE_EXTEND|DataPlotXY.SCALE_VISIBLE)
+        self._data_plot.set_autoscale(y=DataPlotXY.SCALE_EXTEND|DataPlotXY.SCALE_VISIBLE)
 
         self._widget.switch_data_plot_widget(self._data_plot)
         if context.serial_number() > 1:
@@ -65,7 +64,7 @@ class Plot(Plugin):
 
     def _parse_args(self, argv):
         parser = argparse.ArgumentParser(prog='rqt_plot_xy', add_help=False)
-        Plot.add_arguments(parser)
+        PlotXY.add_arguments(parser)
         args = parser.parse_args(argv)
 
         # convert topic arguments into topic names
@@ -118,11 +117,15 @@ class Plot(Plugin):
         self._data_plot.save_settings(plugin_settings, instance_settings)
         instance_settings.set_value('autoscale', self._widget.autoscale_checkbox.isChecked())
         instance_settings.set_value('topics', pack(self._widget._rosdata.keys()))
+        instance_settings.set_value('markers_on', self._data_plot._markers_on)
 
     def restore_settings(self, plugin_settings, instance_settings):
         autoscale = instance_settings.value('autoscale', True) in [True, 'true']
         self._widget.autoscale_checkbox.setChecked(autoscale)
-        self._data_plot.autoscale(autoscale)
+        self._data_plot.autoscroll(autoscale)
+
+        markers_on = instance_settings.value('markers_on', True) in [True, 'true']
+        self._data_plot._switch_plot_markers(markers_on)
 
         self._update_title()
 

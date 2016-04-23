@@ -107,11 +107,11 @@ def get_plottable_fields(base_topic_name, array_class):
     return numeric_fields, message
 
 
-class PlotWidget(QWidget):
+class PlotWidgetXY(QWidget):
     _redraw_interval = 40
 
     def __init__(self, initial_topics=None, start_paused=False):
-        super(PlotWidget, self).__init__()
+        super(PlotWidgetXY, self).__init__()
         self.setObjectName('PlotWidget')
 
         self._initial_topics = initial_topics
@@ -149,7 +149,7 @@ class PlotWidget(QWidget):
 
         self.data_plot = data_plot
         self.data_plot_layout.addWidget(self.data_plot)
-        self.data_plot.autoscale(self.autoscale_checkbox.isChecked())
+        self.data_plot.autoscroll(self.autoscale_checkbox.isChecked())
 
         # setup drag 'n drop
         self.data_plot.dropEvent = self.dropEvent
@@ -245,7 +245,7 @@ class PlotWidget(QWidget):
 
     @Slot(bool)
     def on_autoscale_checkbox_clicked(self, checked):
-        self.data_plot.autoscale(checked)
+        self.data_plot.autoscroll(checked)
         if checked:
             self.data_plot.redraw()
 
