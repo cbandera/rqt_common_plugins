@@ -43,7 +43,7 @@ import rospy
 from rqt_py_common.topic_completer import TopicCompleter
 from rqt_py_common import topic_helpers
 
-from .rosplot import ROSData, RosPlotException
+from .rosplot_xy import ROSDataXY, RosPlotException
 
 
 def is_valid_base_topic(topic_name):
@@ -298,7 +298,7 @@ class PlotWidgetXY(QWidget):
         if keyname in self._rosdata:
             qWarning('PlotWidget.add_topic(): topic already subscribed: %s' % topic_name)
             return
-        self._rosdata[keyname] = ROSData(topic_name, x_field, y_field)
+        self._rosdata[keyname] = ROSDataXY(topic_name, x_field, y_field)
         if self._rosdata[keyname].error is not None:
             qWarning(str(self._rosdata[keyname].error))
             del self._rosdata[keyname]

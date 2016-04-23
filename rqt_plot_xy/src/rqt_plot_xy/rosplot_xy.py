@@ -33,84 +33,23 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 
-import string
-import sys
-import threading
-import time
-
-import rosgraph
-import roslib.message
-import roslib.names
 import rospy
 
-
-class RosPlotException(Exception):
-    pass
+from rqt_plot.rosplot import ROSData, RosPlotException, get_topic_type, _field_eval
 
 
-def _get_topic_type(topic):
-    """
-    subroutine for getting the topic type
-    (nearly identical to rostopic._get_topic_type, except it returns rest of name instead of fn)
-
-    :returns: topic type, real topic name, and rest of name referenced
-      if the topic points to a field within a topic, e.g. /rosout/msg, ``str, str, str``
-    """
-    try:
-        master = rosgraph.Master('/rosplot')
-        val = master.getTopicTypes()
-    except:
-        raise RosPlotException("unable to get list of topics from master")
-    matches = [(t, t_type) for t, t_type in val if t == topic or topic.startswith(t + '/')]
-    if matches:
-        t, t_type = matches[0]
-        if t_type == roslib.names.ANYTYPE:
-            return None, None, None
-        if t_type == topic:
-            return t_type, None
-        return t_type, t, topic[len(t):]
-    else:
-        return None, None, None
-
-
-def get_topic_type(topic):
-    """
-    Get the topic type (nearly identical to rostopic.get_topic_type, except it doesn't return a fn)
-
-    :returns: topic type, real topic name, and rest of name referenced
-      if the \a topic points to a field within a topic, e.g. /rosout/msg, ``str, str, str``
-    """
-    topic_type, real_topic, rest = _get_topic_type(topic)
-    if topic_type:
-        return topic_type, real_topic, rest
-    else:
-        return None, None, None
-
-
-class ROSData(object):
+class ROSDataXY(ROSData):
     """
     Subscriber to ROS topic that buffers incoming data
     """
 
     def __init__(self, base_topic, x_field, y_field):
-        self.name = base_topic
-        self.error = None
-
-        self.lock = threading.Lock()
-        self.buff_x = []
-        self.buff_y = []
+        super(ROSDataXY, self).__init__(base_topic, rospy.Time.now())
 
         topic_type, real_topic, fields = get_topic_type(base_topic)
         if topic_type is not None:
-            self.x_field_evals = generate_field_evals(base_topic[len(real_topic)+1:], x_field)
-            self.y_field_evals = generate_field_evals(base_topic[len(real_topic)+1:], y_field)
-            data_class = roslib.message.get_message_class(topic_type)
-            self.sub = rospy.Subscriber(real_topic, data_class, self._ros_cb)
-        else:
-            self.error = RosPlotException("Can not resolve base_topic type of %s" % base_topic)
-
-    def close(self):
-        self.sub.unregister()
+            self.x_field_evals = generate_field_evals(base_topic[len(real_topic) + 1:], x_field)
+            self.y_field_evals = generate_field_evals(base_topic[len(real_topic) + 1:], y_field)
 
     def _ros_cb(self, msg):
         """
@@ -126,24 +65,6 @@ class ROSData(object):
                 self.error = RosPlotException("Invalid topic spec [%s]: %s" % (self.name, str(e)))
         finally:
             self.lock.release()
-
-    def next(self):
-        """
-        Get the next data in the series
-
-        :returns: [xdata], [ydata]
-        """
-        if self.error:
-            raise self.error
-        try:
-            self.lock.acquire()
-            buff_x = self.buff_x
-            buff_y = self.buff_y
-            self.buff_x = []
-            self.buff_y = []
-        finally:
-            self.lock.release()
-        return buff_x, buff_y
 
     def _get_data(self, evals, msg):
         val = msg
@@ -162,8 +83,7 @@ class ROSData(object):
 def _array_eval(field_name):
     """
     :param field_name: name of field to index into, ``str``
-    :param slot_num: index of slot to return, ``str``
-    :returns: fn(msg_field)->msg_field[slot_num]
+    :returns: fn(list of elements)->[fn(field_name for every el in list]
     """
 
     def fn(f):
@@ -172,22 +92,9 @@ def _array_eval(field_name):
     return fn
 
 
-def _field_eval(field_name):
-    """
-    :param field_name: name of field to return, ``str``
-    :returns: fn(msg_field)->msg_field.field_name
-    """
-
-    def fn(f):
-        return getattr(f, field_name)
-
-    return fn
-
-
 def _dummy_eval():
     """
-    :param field_name: name of field to return, ``str``
-    :returns: fn(msg_field)->msg_field.field_name
+    :returns: fn(msg_field)->[0,1,...,len(msg.field)]
     """
 
     def fn(f):
