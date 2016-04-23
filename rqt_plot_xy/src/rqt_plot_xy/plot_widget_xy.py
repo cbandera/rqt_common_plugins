@@ -30,21 +30,13 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import os
-import rospkg
 import roslib
-
-from python_qt_binding import loadUi
-from python_qt_binding.QtCore import Qt, QTimer, qWarning, Slot
-from python_qt_binding.QtGui import QAction, QIcon, QMenu, QWidget, QComboBox
-
-import rospy
-
-from rqt_py_common.topic_completer import TopicCompleter
+from python_qt_binding.QtCore import qWarning, Slot
+from python_qt_binding.QtGui import QComboBox
+from rqt_plot.plot_widget import PlotWidget
 from rqt_py_common import topic_helpers
 
-from rqt_plot.plot_widget import PlotWidget
-from .rosplot_xy import ROSDataXY, RosPlotException
+from .rosplot_xy import ROSDataXY
 
 
 def is_valid_base_topic(topic_name):
@@ -127,6 +119,9 @@ class PlotWidgetXY(PlotWidget):
         self.dataPlotControls.insertWidget(3, self.y_field)
 
         self.autoscroll_checkbox.setText("autoscale")
+
+        self.topic_edit.setText("")
+        self.topic_edit.setPlaceholderText("/Path/To/VariableArrayField/of/Topic[]/")
 
     @Slot(str)
     def on_topic_edit_textChanged(self, topic_name):
