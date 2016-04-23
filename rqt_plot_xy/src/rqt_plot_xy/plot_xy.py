@@ -115,14 +115,14 @@ class PlotXY(Plugin):
 
     def save_settings(self, plugin_settings, instance_settings):
         self._data_plot.save_settings(plugin_settings, instance_settings)
-        instance_settings.set_value('autoscale', self._widget.autoscale_checkbox.isChecked())
+        instance_settings.set_value('autoscroll', self._widget.autoscroll_checkbox.isChecked())
         instance_settings.set_value('topics', pack(self._widget._rosdata.keys()))
         instance_settings.set_value('markers_on', self._data_plot._markers_on)
 
     def restore_settings(self, plugin_settings, instance_settings):
-        autoscale = instance_settings.value('autoscale', True) in [True, 'true']
-        self._widget.autoscale_checkbox.setChecked(autoscale)
-        self._data_plot.autoscroll(autoscale)
+        autoscroll = instance_settings.value('autoscroll', True) in [True, 'true']
+        self._widget.autoscroll_checkbox.setChecked(autoscroll)
+        self._data_plot.autoscroll(autoscroll)
 
         self._update_title()
 
@@ -130,7 +130,7 @@ class PlotXY(Plugin):
             topics = unpack(instance_settings.value('topics', []))
             if topics:
                 for topic in topics:
-                    self._widget.add_topic(*topic.split(" - "))
+                    self._widget.add_topic(topic)
 
         self._data_plot.restore_settings(plugin_settings, instance_settings)
 

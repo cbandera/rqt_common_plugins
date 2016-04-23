@@ -36,13 +36,14 @@ import roslib
 
 from python_qt_binding import loadUi
 from python_qt_binding.QtCore import Qt, QTimer, qWarning, Slot
-from python_qt_binding.QtGui import QAction, QIcon, QMenu, QWidget
+from python_qt_binding.QtGui import QAction, QIcon, QMenu, QWidget, QComboBox
 
 import rospy
 
 from rqt_py_common.topic_completer import TopicCompleter
 from rqt_py_common import topic_helpers
 
+from rqt_plot.plot_widget import PlotWidget
 from .rosplot_xy import ROSDataXY, RosPlotException
 
 
@@ -107,97 +108,24 @@ def get_plottable_fields(base_topic_name, array_class):
     return numeric_fields, message
 
 
-class PlotWidgetXY(QWidget):
-    _redraw_interval = 40
+class PlotWidgetXY(PlotWidget):
+    topic_separator = " - "
 
     def __init__(self, initial_topics=None, start_paused=False):
-        super(PlotWidgetXY, self).__init__()
-        self.setObjectName('PlotWidget')
+        super(PlotWidgetXY, self).__init__(initial_topics, start_paused)
 
-        self._initial_topics = initial_topics
+        self.label.setText("ArrayTopic:")
+        self.x_field = QComboBox()
+        self.x_field.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.x_field.currentIndexChanged.connect(self.on_x_field_currentIndexChanged)
+        self.dataPlotControls.insertWidget(2, self.x_field)
 
-        rp = rospkg.RosPack()
-        ui_file = os.path.join(rp.get_path('rqt_plot_xy'), 'resource', 'plot.ui')
-        loadUi(ui_file, self)
-        self.subscribe_topic_button.setIcon(QIcon.fromTheme('list-add'))
-        self.remove_topic_button.setIcon(QIcon.fromTheme('list-remove'))
-        self.pause_button.setIcon(QIcon.fromTheme('media-playback-pause'))
-        self.clear_button.setIcon(QIcon.fromTheme('edit-clear'))
-        self.data_plot = None
+        self.y_field = QComboBox()
+        self.y_field.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.y_field.currentIndexChanged.connect(self.on_y_field_currentIndexChanged)
+        self.dataPlotControls.insertWidget(3, self.y_field)
 
-        self.subscribe_topic_button.setEnabled(False)
-        if start_paused:
-            self.pause_button.setChecked(True)
-
-        self._topic_completer = TopicCompleter(self.topic_edit)
-        self._topic_completer.update_topics()
-        self.topic_edit.setCompleter(self._topic_completer)
-
-        self._rosdata = {}
-        self._remove_topic_menu = QMenu()
-
-        # init and start update timer for plot
-        self._update_plot_timer = QTimer(self)
-        self._update_plot_timer.timeout.connect(self.update_plot)
-
-    def switch_data_plot_widget(self, data_plot):
-        self.enable_timer(enabled=False)
-
-        self.data_plot_layout.removeWidget(self.data_plot)
-        if self.data_plot is not None:
-            self.data_plot.close()
-
-        self.data_plot = data_plot
-        self.data_plot_layout.addWidget(self.data_plot)
-        self.data_plot.autoscroll(self.autoscale_checkbox.isChecked())
-
-        # setup drag 'n drop
-        self.data_plot.dropEvent = self.dropEvent
-        self.data_plot.dragEnterEvent = self.dragEnterEvent
-
-        if self._initial_topics:
-            for topic_name in self._initial_topics:
-                self.add_topic(*topic_name.split(" - "))
-            self._initial_topics = None
-        else:
-            for topic_name, rosdata in self._rosdata.items():
-                data_x, data_y = rosdata.next()
-                self.data_plot.add_curve(topic_name, topic_name, data_x, data_y)
-
-        self._subscribed_topics_changed()
-
-    @Slot('QDragEnterEvent*')
-    def dragEnterEvent(self, event):
-        # get topic name
-        if not event.mimeData().hasText():
-            if not hasattr(event.source(), 'selectedItems') or len(event.source().selectedItems()) == 0:
-                qWarning(
-                        'Plot.dragEnterEvent(): not hasattr(event.source(), selectedItems) or len(event.source().selectedItems()) == 0')
-                return
-            item = event.source().selectedItems()[0]
-            topic_name = item.data(0, Qt.UserRole)
-            if topic_name == None:
-                qWarning('Plot.dragEnterEvent(): not hasattr(item, ros_topic_name_)')
-                return
-        else:
-            topic_name = str(event.mimeData().text())
-
-        # check for plottable field type
-        # TODO update this call
-        plottable, message = is_plottable(topic_name)
-        if plottable:
-            event.acceptProposedAction()
-        else:
-            qWarning('Plot.dragEnterEvent(): rejecting: "%s"' % (message))
-
-    @Slot('QDropEvent*')
-    def dropEvent(self, event):
-        if event.mimeData().hasText():
-            topic_name = str(event.mimeData().text())
-        else:
-            droped_item = event.source().selectedItems()[0]
-            topic_name = str(droped_item.data(0, Qt.UserRole))
-        self.add_topic(topic_name)
+        self.autoscroll_checkbox.setText("autoscale")
 
     @Slot(str)
     def on_topic_edit_textChanged(self, topic_name):
@@ -224,114 +152,44 @@ class PlotWidgetXY(QWidget):
                 for field in fields:
                     self.x_field.addItem(field)
                     self.y_field.addItem(field)
+                self.x_field.setCurrentIndex(0)
+                self.y_field.setCurrentIndex(0)
 
         self.subscribe_topic_button.setToolTip(message)
 
+    @Slot()
+    def on_topic_edit_returnPressed(self):
+        pass
+
     @Slot(str)
     def on_x_field_currentIndexChanged(self, text):
-        self.subscribe_topic_button.setEnabled(self.x_field.currentIndex() or self.y_field.currentIndex())
+        self.subscribe_topic_button.setEnabled(self.x_field.currentIndex() > 0 or self.y_field.currentIndex() > 0)
 
     @Slot(str)
     def on_y_field_currentIndexChanged(self, text):
-        self.subscribe_topic_button.setEnabled(self.x_field.currentIndex() or self.y_field.currentIndex())
+        self.subscribe_topic_button.setEnabled(self.x_field.currentIndex() > 0 or self.y_field.currentIndex() > 0)
 
     @Slot()
     def on_subscribe_topic_button_clicked(self):
-        self.add_topic(str(self.topic_edit.text()), str(self.x_field.currentText()), str(self.y_field.currentText()))
+        topic_name = self.topic_separator.join([str(self.topic_edit.text()),
+                                                str(self.x_field.currentText()),
+                                                str(self.y_field.currentText())])
+        self.add_topic(topic_name)
 
-    @Slot(bool)
-    def on_pause_button_clicked(self, checked):
-        self.enable_timer(not checked)
-
-    @Slot(bool)
-    def on_autoscale_checkbox_clicked(self, checked):
-        self.data_plot.autoscroll(checked)
-        if checked:
-            self.data_plot.redraw()
-
-    @Slot()
-    def on_clear_button_clicked(self):
-        self.clear_plot()
-
-    def update_plot(self):
-        if self.data_plot is not None:
-            needs_redraw = False
-            for topic_name, rosdata in self._rosdata.items():
-                try:
-                    data_x, data_y = rosdata.next()
-                    if data_x or data_y:
-                        self.data_plot.update_values(topic_name, data_x, data_y)
-                        needs_redraw = True
-                except RosPlotException as e:
-                    qWarning('PlotWidget.update_plot(): error in rosplot: %s' % e)
-            if needs_redraw:
-                self.data_plot.redraw()
-
-    def _subscribed_topics_changed(self):
-        self._update_remove_topic_menu()
-        if not self.pause_button.isChecked():
-            # if pause button is not pressed, enable timer based on subscribed topics
-            self.enable_timer(self._rosdata)
-        self.data_plot.redraw()
-
-    def _update_remove_topic_menu(self):
-        def make_remove_topic_function(x):
-            return lambda: self.remove_topic(x)
-
-        self._remove_topic_menu.clear()
-        for keyname in sorted(self._rosdata.keys()):
-            action = QAction(keyname, self._remove_topic_menu)
-            action.triggered.connect(make_remove_topic_function(keyname))
-            self._remove_topic_menu.addAction(action)
-
-        if len(self._rosdata) > 1:
-            all_action = QAction('All', self._remove_topic_menu)
-            all_action.triggered.connect(self.clean_up_subscribers)
-            self._remove_topic_menu.addAction(all_action)
-
-        self.remove_topic_button.setMenu(self._remove_topic_menu)
-
-    def add_topic(self, topic_name, x_field, y_field):
+    def add_topic(self, topic_name):
+        base_topic_name, x_field, y_field = topic_name.split(self.topic_separator)
         topics_changed = False
-        keyname = topic_name + " - " + x_field + " - " + y_field
-        print(keyname)
-        if keyname in self._rosdata:
+        if topic_name in self._rosdata:
             qWarning('PlotWidget.add_topic(): topic already subscribed: %s' % topic_name)
             return
-        self._rosdata[keyname] = ROSDataXY(topic_name, x_field, y_field)
-        if self._rosdata[keyname].error is not None:
-            qWarning(str(self._rosdata[keyname].error))
-            del self._rosdata[keyname]
+        self._rosdata[topic_name] = ROSDataXY(base_topic_name, x_field, y_field)
+        if self._rosdata[topic_name].error is not None:
+            qWarning(str(self._rosdata[topic_name].error))
+            del self._rosdata[topic_name]
         else:
-            data_x, data_y = self._rosdata[keyname].next()
-            self.data_plot.add_curve(keyname, keyname, data_x, data_y)
+            data_x, data_y = self._rosdata[topic_name].next()
+            self.data_plot.add_curve(topic_name, topic_name, data_x, data_y)
             topics_changed = True
 
         if topics_changed:
             self._subscribed_topics_changed()
-
-    def remove_topic(self, keyname):
-        self._rosdata[keyname].close()
-        del self._rosdata[keyname]
-        self.data_plot.remove_curve(keyname)
-
-        self._subscribed_topics_changed()
-
-    def clear_plot(self):
-        for keyname, _ in self._rosdata.items():
-            self.data_plot.clear_values(keyname)
-        self.data_plot.redraw()
-
-    def clean_up_subscribers(self):
-        for keyname, rosdata in self._rosdata.items():
-            rosdata.close()
-            self.data_plot.remove_curve(keyname)
-        self._rosdata = {}
-
-        self._subscribed_topics_changed()
-
-    def enable_timer(self, enabled=True):
-        if enabled:
-            self._update_plot_timer.start(self._redraw_interval)
-        else:
-            self._update_plot_timer.stop()
