@@ -99,11 +99,12 @@ def get_plottable_fields(base_topic_name, array_class):
         elif slot_class not in (str, bool):
             plottable_fields, _ = get_plottable_fields("%s/%s" % (base_topic_name, slot), slot_class)
             numeric_fields.extend(plottable_fields)
-    message = ""
+
     if len(numeric_fields) > 0:
         message = "%d plottable fields found" % len(numeric_fields)
     else:
         message = "No plottable fields found"
+
     numeric_fields.sort()
     return numeric_fields, message
 
@@ -154,6 +155,13 @@ class PlotWidgetXY(PlotWidget):
                     self.y_field.addItem(field)
                 self.x_field.setCurrentIndex(0)
                 self.y_field.setCurrentIndex(0)
+            else:
+                valid_base_topic = False
+
+        if valid_base_topic:
+            self.topic_edit.setStyleSheet("color: rgb(0, 100, 0);")
+        else:
+            self.topic_edit.setStyleSheet("color: rgb(0, 0, 0);")
 
         self.subscribe_topic_button.setToolTip(message)
 
