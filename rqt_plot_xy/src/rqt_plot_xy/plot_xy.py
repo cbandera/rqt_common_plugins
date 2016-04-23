@@ -32,80 +32,77 @@
 
 import argparse
 
-from python_qt_binding import QT_BINDING
-from python_qt_binding.QtCore import qDebug
 from rqt_gui_py.plugin import Plugin
-
 from rqt_py_common.ini_helper import pack, unpack
 
+from .data_plot_xy import DataPlotXY
 from .plot_widget_xy import PlotWidgetXY
 
-from .data_plot_xy import DataPlotXY
+
+def _parse_args(argv):
+    parser = argparse.ArgumentParser(prog='rqt_plot_xy', add_help=False)
+    PlotXY.add_arguments(parser)
+    args = parser.parse_args(argv)
+
+    # convert topic arguments into topic names
+    topic_list = []
+    for t in args.topics:
+        # c_topics is the list of topics to plot
+        c_topics = []
+        # compute combined topic list, t == '/foo/bar1,/baz/bar2'
+        for sub_t in [x for x in t.split(',') if x]:
+            # check for shorthand '/foo/field1:field2:field3'
+            if ':' in sub_t:
+                base = sub_t[:sub_t.find(':')]
+                # the first prefix includes a field name, so save then strip it off
+                c_topics.append(base)
+                if not '/' in base:
+                    parser.error("%s must contain a topic and field name" % sub_t)
+                base = base[:base.rfind('/')]
+
+                # compute the rest of the field names
+                fields = sub_t.split(':')[1:]
+                c_topics.extend(["%s/%s" % (base, f) for f in fields if f])
+            else:
+                c_topics.append(sub_t)
+        # #1053: resolve command-line topic names
+        import rosgraph
+        c_topics = [rosgraph.names.script_resolve_name('rqt_plot_xy', n) for n in c_topics]
+        if type(c_topics) == list:
+            topic_list.extend(c_topics)
+        else:
+            topic_list.append(c_topics)
+    args.topics = topic_list
+
+    return args
+
 
 class PlotXY(Plugin):
-
     def __init__(self, context):
         super(PlotXY, self).__init__(context)
         self.setObjectName('Plot')
 
         self._context = context
 
-        self._args = self._parse_args(context.argv())
+        self._args = _parse_args(context.argv())
         self._widget = PlotWidgetXY(initial_topics=self._args.topics, start_paused=self._args.start_paused)
         self._data_plot = DataPlotXY(self._widget)
 
-        self._data_plot.set_autoscale(x=DataPlotXY.SCALE_EXTEND|DataPlotXY.SCALE_VISIBLE)
-        self._data_plot.set_autoscale(y=DataPlotXY.SCALE_EXTEND|DataPlotXY.SCALE_VISIBLE)
+        self._data_plot.set_autoscale(x=DataPlotXY.SCALE_ALL)
+        self._data_plot.set_autoscale(y=DataPlotXY.SCALE_ALL)
 
         self._widget.switch_data_plot_widget(self._data_plot)
         if context.serial_number() > 1:
             self._widget.setWindowTitle(self._widget.windowTitle() + (' (%d)' % context.serial_number()))
         context.add_widget(self._widget)
 
-    def _parse_args(self, argv):
-        parser = argparse.ArgumentParser(prog='rqt_plot_xy', add_help=False)
-        PlotXY.add_arguments(parser)
-        args = parser.parse_args(argv)
-
-        # convert topic arguments into topic names
-        topic_list = []
-        for t in args.topics:
-            # c_topics is the list of topics to plot
-            c_topics = []
-            # compute combined topic list, t == '/foo/bar1,/baz/bar2'
-            for sub_t in [x for x in t.split(',') if x]:
-                # check for shorthand '/foo/field1:field2:field3'
-                if ':' in sub_t:
-                    base = sub_t[:sub_t.find(':')]
-                    # the first prefix includes a field name, so save then strip it off
-                    c_topics.append(base)
-                    if not '/' in base:
-                        parser.error("%s must contain a topic and field name" % sub_t)
-                    base = base[:base.rfind('/')]
-
-                    # compute the rest of the field names
-                    fields = sub_t.split(':')[1:]
-                    c_topics.extend(["%s/%s" % (base, f) for f in fields if f])
-                else:
-                    c_topics.append(sub_t)
-            # #1053: resolve command-line topic names
-            import rosgraph
-            c_topics = [rosgraph.names.script_resolve_name('rqt_plot_xy', n) for n in c_topics]
-            if type(c_topics) == list:
-                topic_list.extend(c_topics)
-            else:
-                topic_list.append(c_topics)
-        args.topics = topic_list
-
-        return args
-
     @staticmethod
     def add_arguments(parser):
         group = parser.add_argument_group('Options for rqt_plot_xy plugin')
         group.add_argument('-P', '--pause', action='store_true', dest='start_paused',
-            help='Start in paused state')
+                           help='Start in paused state')
         group.add_argument('-e', '--empty', action='store_true', dest='start_empty',
-            help='Start without restoring previous topics')
+                           help='Start without restoring previous topics')
         group.add_argument('topics', nargs='*', default=[], help='Topics to plot')
 
     def _update_title(self):

@@ -180,6 +180,11 @@ class PlotWidgetXY(PlotWidget):
         self.add_topic(topic_name)
 
     def add_topic(self, topic_name):
+        if topic_name.count(self.topic_separator) != 2:
+            qWarning("PlotWidget.add_topic(): topic must be of the format '/base_topic/arrayfield%s/x_field%s"
+                     "/yfield'\n\t\t\treveiced: '%s'" % (self.topic_separator, self.topic_separator,topic_name))
+            return
+
         base_topic_name, x_field, y_field = topic_name.split(self.topic_separator)
         topics_changed = False
         if topic_name in self._rosdata:
