@@ -32,7 +32,10 @@
 
 import roslib
 from python_qt_binding.QtCore import qWarning, Slot
-from python_qt_binding.QtGui import QComboBox
+try:
+	from python_qt_binding.QtGui import QComboBox
+except ImportError:
+	from python_qt_binding.QtWidgets import QComboBox
 from rqt_plot.plot_widget import PlotWidget
 from rqt_py_common import topic_helpers
 
